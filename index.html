@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PulsePoint — Performance Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- Firebase SDKs (v9 compat mode — works like a script tag, no build needed) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c10;--bg2:#11141b;--bg3:#181c26;
+  --border:rgba(255,255,255,0.07);
+  --text:#e8eaf0;--muted:#7a8099;--dim:#4a5068;
+  --accent:#63b3ed;--green:#68d391;--orange:#f6ad55;--red:#fc8181;--purple:#b794f4;
+  --font-h:'Syne',sans-serif;--font-b:'DM Sans',sans-serif;
+  --r:10px;--r2:16px;
+}
+html,body{height:100%;font-family:var(--font-b);background:var(--bg);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+input,select,textarea{font-family:var(--font-b);font-size:14px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--r);padding:8px 12px;outline:none;width:100%;transition:.15s}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,179,237,.1)}
+input::placeholder{color:var(--dim)}
+select option{background:var(--bg3)}
+button{font-family:var(--font-b);cursor:pointer;border:none;border-radius:var(--r);font-size:14px;font-weight:500;transition:.15s}
+button:disabled{opacity:.4;cursor:not-allowed}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fade{animation:fadeIn .3s ease both}
+
+/* ── LAYOUT ── */
+#app{display:flex;height:100vh;overflow:hidden}
+#sidebar{width:210px;min-width:210px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+#main{flex:1;overflow:auto;display:flex;flex-direction:column}
+.page{flex:1;overflow:auto;padding:28px 32px;display:none}
+.page.active{display:block;animation:fadeIn .25s ease}
+
+/* ── SIDEBAR ── */
+.logo{padding:22px 18px 18px;border-bottom:1px solid var(--border)}
+.logo-mark{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:10px}
+.logo h1{font-family:var(--font-h);font-size:15px;font-weight:800;letter-spacing:-.02em}
+.logo p{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
+nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;font-size:13px;font-weight:500;color:var(--muted);background:transparent;border:1px solid transparent;cursor:pointer;text-align:left;width:100%;transition:.15s}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.nav-item.active{color:var(--accent);background:rgba(99,179,237,.08);border-color:rgba(99,179,237,.15)}
+.nav-icon{font-size:15px;width:18px;text-align:center}
+.sidebar-user{padding:14px 12px;border-top:1px solid var(--border)}
+.user-row{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--accent));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.user-email{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-logout{width:100%;padding:6px 10px;background:transparent;color:var(--muted);border:1px solid var(--border);font-size:12px;border-radius:7px}
+.btn-logout:hover{color:var(--red);border-color:rgba(252,129,129,.3)}
+
+/* ── PAGE HEADER ── */
+.page-header{padding:26px 32px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;background:var(--bg);flex-shrink:0}
+.page-header h2{font-family:var(--font-h);font-size:20px;font-weight:800;letter-spacing:-.02em}
+.page-header p{color:var(--muted);font-size:13px;margin-top:3px}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px}
+.card-sm{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+
+/* ── BUTTONS ── */
+.btn{padding:9px 18px;border-radius:var(--r);font-size:14px;font-weight:500}
+.btn-primary{background:var(--accent);color:#0a0c10;font-weight:700}
+.btn-primary:hover{opacity:.9}
+.btn-secondary{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--muted)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{color:var(--text)}
+.btn-danger{background:rgba(252,129,129,.12);color:var(--red);border:1px solid rgba(252,129,129,.25)}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-success{background:var(--green);color:#0a0c10;font-weight:700}
+
+/* ── FORM ── */
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.form-hint{font-size:11px;color:var(--dim)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+
+/* ── BADGE ── */
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;backdrop-filter:blur(4px);display:none}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);width:100%;max-width:640px;max-height:90vh;overflow:auto;animation:fadeIn .2s ease}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border)}
+.modal-header h3{font-family:var(--font-h);font-size:15px;font-weight:700}
+.modal-close{background:none;color:var(--muted);font-size:20px;padding:0 4px;line-height:1}
+.modal-body{padding:22px}
+
+/* ── PROGRESS ── */
+.progress-bar{background:var(--bg3);border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+
+/* ── SPINNER ── */
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;background:var(--bg3);border-radius:var(--r);padding:3px;margin-bottom:20px}
+.tab{flex:1;padding:7px 12px;border-radius:8px;font-size:13px;font-weight:500;background:transparent;color:var(--muted);border:1px solid transparent;transition:.15s;cursor:pointer}
+.tab.active{background:var(--bg2);color:var(--text);border-color:var(--border)}
+
+/* ── WEIGHT STATUS ── */
+.weight-status{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:12px;margin:8px 0}
+.weight-ok{background:rgba(104,211,145,.08);border:1px solid rgba(104,211,145,.2);color:var(--green)}
+.weight-bad{background:rgba(252,129,129,.08);border:1px solid rgba(252,129,129,.2);color:var(--red)}
+
+/* ── SCORE ── */
+.score-big{font-family:var(--font-h);font-weight:800;font-size:26px}
+.score-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:60px 24px;color:var(--muted)}
+.empty-icon{font-size:36px;margin-bottom:12px}
+.empty h3{font-family:var(--font-h);font-size:15px;color:var(--text);margin-bottom:6px}
+
+/* ── LOGIN ── */
+#login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;padding:16px}
+#login-screen.hidden{display:none}
+.login-box{width:100%;max-width:400px;animation:fadeIn .4s ease}
+.login-logo{text-align:center;margin-bottom:28px}
+.login-logo .mark{width:50px;height:50px;background:var(--accent);border-radius:13px;display:inline-flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:12px}
+.login-logo h1{font-family:var(--font-h);font-size:24px;font-weight:800;letter-spacing:-.03em}
+.login-logo p{color:var(--muted);font-size:13px;margin-top:4px}
+.login-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:28px}
+.login-card h2{font-family:var(--font-h);font-size:17px;font-weight:700;margin-bottom:4px}
+.login-card p{color:var(--muted);font-size:13px;margin-bottom:22px}
+.error-msg{display:flex;align-items:center;gap:7px;padding:9px 12px;background:rgba(252,129,129,.1);border:1px solid rgba(252,129,129,.25);border-radius:8px;color:var(--red);font-size:13px;margin-bottom:14px}
+
+/* ── DEPT CARD ── */
+.dept-section{margin-bottom:28px}
+.dept-title{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.emp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.emp-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;display:flex;align-items:flex-start;gap:10px}
+.emp-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;flex-shrink:0}
+.emp-info{flex:1;min-width:0}
+.emp-name{font-weight:600;font-size:14px}
+.emp-role{color:var(--muted);font-size:12px;margin-top:1px}
+.emp-actions{display:flex;gap:3px}
+.icon-btn{background:none;color:var(--dim);padding:5px;border-radius:6px;font-size:13px;line-height:1}
+.icon-btn:hover{color:var(--red)}
+
+/* ── TRACKING TABLE ── */
+.track-row{display:grid;gap:10px;align-items:center;padding:11px 14px}
+.track-header{font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;padding:6px 14px;display:grid;gap:10px}
+.track-sub{background:var(--bg3);border-top:1px solid var(--border);padding-left:36px}
+.ach-val{font-family:var(--font-h);font-weight:700;font-size:14px}
+
+/* ── DASHBOARD CARD ── */
+.dash-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden}
+.dash-card-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.dash-scores{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border)}
+.dash-score-cell{background:var(--bg2);padding:14px;text-align:center}
+.dash-targets{padding:12px 14px;background:var(--bg3);border-top:1px solid var(--border)}
+.trend-bar{display:flex;align-items:flex-end;gap:2px;height:40px}
+.trend-bar-item{flex:1;border-radius:2px 2px 0 0;min-height:3px;transition:.3s}
+
+/* ── DEPT SUMMARY ── */
+.dept-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:28px}
+.dept-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- LOGIN SCREEN -->
+<!-- ══════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="mark">⚡</div>
+      <h1>PulsePoint</h1>
+      <p>Performance Management System</p>
+    </div>
+    <div class="login-card">
+      <h2>Sign in</h2>
+      <p>Access your performance dashboard</p>
+      <div id="login-error" class="error-msg" style="display:none">⚠ Invalid credentials. Please try again.</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Email</label>
+        <input type="email" id="login-email" placeholder="admin@company.com">
+      </div>
+      <div class="form-group" style="margin-bottom:18px">
+        <label class="form-label">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="doLogin()" id="login-btn">Sign In →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- MAIN APP -->
+<!-- ══════════════════════════════════════════ -->
+<div id="app" style="display:none">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="logo">
+      <div class="logo-mark">⚡</div>
+      <h1>PulsePoint</h1>
+      <p>Performance</p>
+    </div>
+    <nav>
+      <button class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </button>
+      <button class="nav-item" onclick="showPage('people')" id="nav-people">
+        <span class="nav-icon">👥</span> People
+      </button>
+      <button class="nav-item" onclick="showPage('targets')" id="nav-targets">
+        <span class="nav-icon">🎯</span> Targets
+      </button>
+      <button class="nav-item" onclick="showPage('tracking')" id="nav-tracking">
+        <span class="nav-icon">📈</span> Tracking
+      </button>
+      <button class="nav-item" onclick="showPage('settings')" id="nav-settings">
+        <span class="nav-icon">⚙️</span> Settings
+      </button>
+    </nav>
+    <div class="sidebar-user">
+      <div class="user-row">
+        <div class="avatar" id="user-avatar">A</div>
+        <div class="user-email" id="user-email">admin</div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">↩ Sign out</button>
+    </div>
+  </aside>
+
+  <!-- PAGES -->
+  <div id="main">
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div>
+          <h2>Executive Dashboard</h2>
+          <p id="dash-subtitle">Performance overview</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="dash-year" onchange="loadDashboard()" style="width:auto;padding:7px 12px;font-size:13px"></select>
+          <select id="dash-dept" onchange="renderDashboard()" style="width:auto;padding:7px 12px;font-size:13px"><option value="all">All Departments</option></select>
+        </div>
+      </div>
+      <div style="padding:24px 32px" id="dash-content">
+        <div class="empty"><div class="empty-icon">📊</div><h3>Loading…</h3></div>
+      </div>
+    </div>
+
+    <!-- PEOPLE -->
+    <div id="page-people" class="page">
+      <div class="page-header">
+        <div><h2>People</h2><p id="people-subtitle">Team members</p></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="openDeptModal()">🏢 Add Department</button>
+          <button class="btn btn-primary btn-sm" onclick="openEmpModal()">+ Add Person</button>
+        </div>
+      </div>
+      <div style="padding:24px 32px" id="people-content">
+        <div class="empty"><div class="spinner" style="margin:0 auto"></div></div>
+      </div>
+    </div>
+
+    <!-- TARGETS -->
+    <div id="page-targets" class="page">
+      <div class="page-header">
+        <div><h2>Target Setup</h2><p>Define weighted targets per person per year</p></div>
+      </div>
+      <div style="padding:24px 32px">
+        <div class="card" style="margin-bottom:20px">
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Employee</label>
+              <select id="target-emp" onchange="loadTargets()"><option value="">Choose a person…</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Year</label>
+              <select id="target-year" onchange="loadTargets()" style="width:auto"></select>
+            </div>
+          </div>
+        </div>
+        <div id="targets-content">
+          <div class="empty"><div class="empty-icon">🎯</div><h3>Select a person above</h3></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRACKING -->
+    <div id="page-tracking" class="page">
+      <div class="page-header">
+        <div><h2>Performance Tracking</h2><p>Enter monthly plan vs actual and FY forecast</p></div>
+      </div>
+      <div style="padding:24px 32px">
+        <div class="card" style="margin-bottom:20px">
+          <div class="grid-3">
+            <div class="form-group">
+              <label class="form-label">Employee</label>
+              <select id="track-emp" onchange="loadTracking()"><option value="">Choose a person…</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Year</label>
+              <select id="track-year" onchange="loadTracking()"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Month</label>
+              <select id="track-month" onchange="loadTracking()"></select>
+            </div>
+          </div>
+        </div>
+        <div id="tracking-content">
+          <div class="empty"><div class="empty-icon">📈</div><h3>Select an employee above</h3></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="page-settings" class="page">
+      <div class="page-header">
+        <div><h2>Settings</h2><p>Configuration & help</p></div>
+      </div>
+      <div style="padding:24px 32px;display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <h3 style="font-family:var(--font-h);font-weight:700;margin-bottom:12px">Firebase Setup</h3>
+          <p style="color:var(--muted);font-size:13px;line-height:1.7">Open <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">firebase-config.js</code> and replace the placeholder values with your Firebase project config from <strong>Firebase Console → Project Settings → Your Apps</strong>.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-family:var(--font-h);font-weight:700;margin-bottom:12px">Firestore Security Rules</h3>
+          <p style="color:var(--muted);font-size:13px;margin-bottom:10px">In Firebase Console → Firestore → Rules, paste this:</p>
+          <pre style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;color:var(--accent);overflow:auto">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}</pre>
+        </div>
+        <div class="card">
+          <h3 style="font-family:var(--font-h);font-weight:700;margin-bottom:12px">Usage Guide</h3>
+          <ol style="color:var(--muted);font-size:13px;line-height:2;padding-left:18px">
+            <li>Go to <strong>People</strong> → Add departments → Add team members</li>
+            <li>Go to <strong>Targets</strong> → Select each person → Define 1–5 annual targets</li>
+            <li>Go to <strong>Tracking</strong> → Each month enter Plan, Actual, and FY Forecast</li>
+            <li>Go to <strong>Dashboard</strong> → View MTD, YTD, and FY Forecast per person</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ══════════════════════════════════════════ -->
+<!-- MODALS -->
+<!-- ══════════════════════════════════════════ -->
+
+<!-- Add/Edit Employee -->
+<div class="modal-overlay" id="modal-emp">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-emp-title">Add Person</h3>
+      <button class="modal-close" onclick="closeModal('modal-emp')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="emp-id">
+      <div class="grid-2" style="gap:14px;margin-bottom:14px">
+        <div class="form-group">
+          <label class="form-label">Full Name *</label>
+          <input id="emp-name" placeholder="Jane Smith">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role / Title *</label>
+          <input id="emp-role" placeholder="Sales Manager">
+        </div>
+      </div>
+      <div class="grid-2" style="gap:14px;margin-bottom:14px">
+        <div class="form-group">
+          <label class="form-label">Department *</label>
+          <select id="emp-dept"><option value="">Select…</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="emp-email" placeholder="jane@company.com">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-ghost" onclick="closeModal('modal-emp')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEmployee()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Department -->
+<div class="modal-overlay" id="modal-dept">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h3>Add Department</h3>
+      <button class="modal-close" onclick="closeModal('modal-dept')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">Department Name *</label>
+        <input id="dept-name" placeholder="Sales, Finance, Operations…" onkeydown="if(event.key==='Enter')saveDept()">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeModal('modal-dept')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveDept()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Project KPIs Modal -->
+<div class="modal-overlay" id="modal-kpis">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3 id="modal-kpis-title">KPIs for Project</h3>
+      <button class="modal-close" onclick="closeModal('modal-kpis')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <p style="color:var(--muted);font-size:13px">Define up to 5 KPIs. Weights must total 100%.</p>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="distributeKpiWeights()">Auto-distribute</button>
+          <button class="btn btn-secondary btn-sm" onclick="addKpiRow()" id="btn-add-kpi">+ Add KPI</button>
+        </div>
+      </div>
+      <div id="kpi-weight-status" class="weight-status weight-bad">⚠ Total: 0% — must equal 100%</div>
+      <div id="kpi-rows"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-ghost" onclick="closeModal('modal-kpis')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveKpis()" id="btn-save-kpis">Save KPIs</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
