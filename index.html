@@ -291,6 +291,7 @@ nav{flex:1;padding:14px 8px 10px;display:flex;flex-direction:column;gap:2px;over
 
       <div class="nav-section perm-nav-section" data-perm="canEditPermissions">System</div>
       <button class="nav-item perm-nav" data-perm="canEditPermissions" onclick="showPage('permissions')" id="nav-permissions"><span class="nav-icon">🛡️</span> Permissions</button>
+      <button class="nav-item perm-nav" data-perm="canEditPermissions" onclick="showPage('departments')" id="nav-departments"><span class="nav-icon">🏢</span> Departments</button>
       <button class="nav-item perm-nav" data-perm="canEditPermissions" onclick="showPage('settings')" id="nav-settings"><span class="nav-icon">⚙️</span> Settings</button>
     </nav>
     <div class="sidebar-user">
@@ -400,6 +401,16 @@ nav{flex:1;padding:14px 8px 10px;display:flex;flex-direction:column;gap:2px;over
         <button class="btn btn-primary btn-sm" onclick="savePermissions()" id="btn-save-perms">Save Changes</button>
       </div>
       <div style="padding:24px 32px" id="permissions-content"><div class="empty"><div class="spinner" style="margin:0 auto"></div></div></div>
+    </div>
+
+    <!-- DEPARTMENTS -->
+    <div id="page-departments" class="page">
+      <div class="page-header">
+        <div><h2>Departments</h2><p>Manage department list</p></div>
+      </div>
+      <div style="padding:24px 32px" id="dept-content">
+        <div class="empty"><div class="spinner" style="margin:0 auto"></div></div>
+      </div>
     </div>
 
     <!-- SETTINGS -->

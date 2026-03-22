@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-// PULSEPOINT v2 — app.js
+// ALVINT — Performance Management
 // ═══════════════════════════════════════════════════════
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -373,6 +373,7 @@ function showPage(name) {
   if (nav)  nav.classList.add('active');
 
   if (name === 'people')      renderPeople();
+  if (name === 'departments') loadDepartmentsPage();
   if (name === 'targets')     { /* selector-driven */ }
   if (name === 'tracking')    { if (!can('canManageTargets') && _currentProfile?.employeeId) loadTracking(); }
   if (name === 'dashboard')   loadDashboard();
@@ -389,6 +390,42 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
 });
+
+
+// ═══════════════════════════════════════════════════════
+// DEPARTMENTS PAGE (developer only)
+// ═══════════════════════════════════════════════════════
+async function loadDepartmentsPage() {
+  const content = document.getElementById('dept-content');
+  if (!content) return;
+  content.innerHTML = '<div class="empty"><div class="spinner" style="margin:0 auto"></div></div>';
+  await loadBaseData();
+  let html = `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 style="font-family:var(--font-h);font-weight:700">Departments (${_departments.length})</h3>
+      <button class="btn btn-primary btn-sm" onclick="openDeptModal()">+ Add Department</button>
+    </div>
+    <table class="table">
+      <thead><tr><th>Name</th><th>Employees</th><th></th></tr></thead>
+      <tbody>
+        ${_departments.map(d => {
+          const count = _employees.filter(e=>e.department===d.name).length;
+          return '<tr><td style="font-weight:500">'+esc(d.name)+'</td><td style="color:var(--muted)">'+count+' member'+(count!==1?'s':'')+'</td><td><div style="display:flex;gap:6px"><button class="btn btn-ghost btn-xs" onclick="openDeptEditModal(''+d.name+'')">Edit</button><button class="btn btn-danger btn-xs" onclick="deleteDept(''+d.id+'',''+esc(d.name)+'')">Delete</button></div></td></tr>';
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+  content.innerHTML = html;
+}
+
+async function deleteDept(id, name) {
+  const count = _employees.filter(e=>e.department===name).length;
+  if (count > 0) return alert('Cannot delete "'+name+'" — it has '+count+' employee'+(count!==1?'s':'')+'. Reassign them first.');
+  if (!confirm('Delete department "'+name+'"?')) return;
+  await db.collection('departments').doc(id).delete();
+  await loadBaseData();
+  loadDepartmentsPage();
+}
 
 // ═══════════════════════════════════════════════════════
 // PEOPLE PAGE
@@ -632,13 +669,17 @@ async function createInvite() {
   document.getElementById('invite-modal-form').style.display   = 'none';
   document.getElementById('invite-modal-footer').style.display = 'none';
   document.getElementById('invite-modal-result').style.display = '';
+  const mailSubject = encodeURIComponent("You've been invited to ALVINT");
+  const mailBody = encodeURIComponent("Hi,\n\nYou've been invited to join ALVINT Performance Management as a "+role+".\n\nClick this link to set your password and activate your account:\n\n"+link+"\n\nThis link expires in 7 days.\n\nWelcome aboard!");
+  const mailtoHref = "mailto:"+email+"?subject="+mailSubject+"&body="+mailBody;
   document.getElementById('invite-modal-result').innerHTML = `
-    <div class="alert alert-success">✓ Invite created! Share this link with ${esc(email)}:</div>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+    <div class="alert alert-success">✓ Invite created for ${esc(email)}!</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;margin-bottom:10px">
       <input value="${esc(link)}" readonly style="font-size:12px;padding:8px 10px">
-      <button class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText('${link}').then(()=>this.textContent='Copied!')">Copy</button>
+      <button class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText('${link}').then(()=>this.textContent='✓ Copied!')">Copy Link</button>
     </div>
-    <p style="color:var(--muted);font-size:12px;margin-top:8px">Link expires in 7 days.</p>
+    <a href="${mailtoHref}" class="btn btn-success btn-sm" style="display:inline-flex;text-decoration:none;margin-bottom:8px">✉️ Open Email Draft</a>
+    <p style="color:var(--muted);font-size:11px;margin-top:4px">Clicking above opens your email app with the invite pre-written. Link expires in 7 days.</p>
     <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="closeModal('modal-invite');loadUsers()">Done</button>
   `;
 }
@@ -905,103 +946,132 @@ async function loadTracking() {
   renderTrackingTable(empId, month);
 }
 
-function renderTrackingTable(empId, month) {
-  const emp   = _employees.find(e => e.id === empId);
-  const mLabel= MONTHS[month-1];
-  const canPlan = can('canManageTargets'); // only superuser/dev can edit plan
-  const cols  = `grid-template-columns:1fr 120px 120px 130px 80px`;
+function renderTrackingTable(empId, period) {
+  const emp = _employees.find(e => e.id === empId);
+  const canPlan = can('canManageTargets');
+  const isYtd = period === 'ytd';
+  const isFy  = period === 'fy';
+  const isMonth = !isYtd && !isFy;
+  const month = isMonth ? parseInt(period) : null;
+  const mLabel = isYtd ? 'YTD (cumulative)' : isFy ? 'FY Forecast' : MONTHS[month-1];
+  const planLabel   = isFy ? 'FY Plan (total)' : isYtd ? 'YTD Plan' : `Plan (${mLabel})`;
+  const actualLabel = isFy ? 'FY Forecast'     : isYtd ? 'YTD Actual' : `Actual (${mLabel})`;
+  const cols = 'grid-template-columns:1fr 130px 140px 80px';
 
-  let html = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <div style="width:34px;height:34px;border-radius:50%;background:hsl(${fullName(emp||{}).charCodeAt(0)*13%360},55%,35%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff">${(fullName(emp||{})[0]||'?').toUpperCase()}</div>
-      <div><div style="font-weight:600">${esc(fullName(emp||{}))}</div><div style="font-size:12px;color:var(--muted)">${mLabel} · ${document.getElementById('track-year').value}</div></div>
-    </div>
-    <div style="display:grid;${cols};gap:10px;padding:6px 14px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">
-      <span>Target / KPI</span>
-      <span>Plan (${mLabel}) ${!canPlan?'<span style="color:var(--dim);font-weight:400;font-size:9px">read-only</span>':''}</span>
-      <span>Actual (${mLabel})</span>
-      <span>FY Forecast</span>
-      <span>Achiev.</span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:6px">`;
+  const emp0 = emp||{};
+  const hue = fullName(emp0).charCodeAt(0)*13%360;
+  let html = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <div style="width:34px;height:34px;border-radius:50%;background:hsl(${hue},55%,35%);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff">${(fullName(emp0)[0]||'?').toUpperCase()}</div>
+    <div><div style="font-weight:600">${esc(fullName(emp0))}</div><div style="font-size:12px;color:var(--muted)">${mLabel} · ${document.getElementById('track-year').value}</div></div>
+  </div>
+  <div style="display:grid;${cols};gap:10px;padding:6px 14px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">
+    <span>Target / KPI</span>
+    <span>${planLabel}${!canPlan&&isMonth?' <span style="color:var(--dim);font-weight:400;font-size:9px">read-only</span>':''}</span>
+    <span>${actualLabel}</span>
+    <span>Achiev.</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px">`;
 
-  _trackTargets.forEach(target => {
+  _trackTargets.forEach(function(target) {
     const isProject = target.type==='project';
-    const pVal = _trackPlans[target.id]?.value??'';
-    const aVal = _trackActuals[target.id]?.value??'';
-    const fVal = _trackForecasts[target.id]?.fyForecast??'';
-    const ach  = pVal!==''&&aVal!==''&&pVal>0?Math.round((aVal/pVal)*100):null;
+    const dir = target.direction || 'higher';
+    const isYN = dir==='yesno';
+    const pVal = _trackPlans[target.id] ? _trackPlans[target.id].value : '';
+    const aVal = isFy
+      ? (_trackForecasts[target.id] ? _trackForecasts[target.id].fyForecast : '')
+      : (_trackActuals[target.id]   ? _trackActuals[target.id].value        : '');
+    const ach = isYN
+      ? (aVal===''?null:aVal>=1?100:0)
+      : (pVal!==''&&aVal!==''?calcKpiAch(parseFloat(aVal),parseFloat(pVal),dir):null);
+    const dirIcon = dir==='higher'?'↑':dir==='lower'?'↓':'✓';
+    const achDisp = ach===null?'—':(isYN?(ach>=100?'✓ Yes':'✗ No'):ach+'%');
 
-    html+=`<div class="card-sm" style="padding:0;overflow:hidden">
-      <div style="display:grid;${cols};gap:10px;padding:11px 14px;align-items:center">
-        <div>
-          <div style="font-weight:600;font-size:13px">${esc(target.name)}</div>
-          <div style="font-size:11px;color:var(--muted)">${isProject?`Project · ${target.kpis?.length||0} KPIs`:`KPI · ${target.unit||'value'}`} <span class="badge" style="background:rgba(99,179,237,.1);color:var(--accent);font-size:10px">${target.weight}%</span></div>
-        </div>`;
+    html += `<div class="card-sm" style="padding:0;overflow:hidden"><div style="display:grid;${cols};gap:10px;padding:11px 14px;align-items:center">
+      <div>
+        <div style="font-weight:600;font-size:13px">${esc(target.name)} <span style="font-size:10px;color:var(--dim)">${dirIcon}</span></div>
+        <div style="font-size:11px;color:var(--muted)">${isProject?('Project · '+(target.kpis?target.kpis.length:0)+' KPIs'):('KPI · '+(target.unit||'value'))} <span class="badge" style="background:rgba(99,179,237,.1);color:var(--accent);font-size:10px">${target.weight}%</span></div>
+      </div>`;
 
     if (isProject) {
-      html+=`<span style="color:var(--dim);font-size:12px">See KPIs ↓</span><span style="color:var(--dim);font-size:12px">See KPIs ↓</span><span style="color:var(--dim);font-size:12px">See KPIs ↓</span><span style="color:var(--dim)">—</span>`;
+      html += `<span style="color:var(--dim);font-size:12px">See KPIs ↓</span><span style="color:var(--dim);font-size:12px">See KPIs ↓</span><span style="color:var(--dim)">—</span>`;
+    } else if (isYN) {
+      const selActType = isFy?'forecast':'actual';
+      html += `<div style="color:var(--dim);font-size:12px;padding:6px 0">Yes / No</div>
+        <select style="padding:6px 10px" onchange="setTrackVal('${selActType}','${target.id}',null,this.value)">
+          <option value="0" ${(aVal==0||aVal==='')?'selected':''}>No — not achieved</option>
+          <option value="1" ${(aVal>=1)?'selected':''}>Yes — achieved</option>
+        </select>`;
     } else {
-      html+=`
-        <input type="number" value="${pVal}" placeholder="0" style="padding:6px 10px" ${!canPlan?'readonly style="padding:6px 10px;opacity:.5"':''} oninput="setTrackVal('plan','${target.id}',null,this.value)">
-        <input type="number" value="${aVal}" placeholder="0" style="padding:6px 10px" oninput="setTrackVal('actual','${target.id}',null,this.value)">
-        <input type="number" value="${fVal}" placeholder="0" style="padding:6px 10px" oninput="setTrackVal('forecast','${target.id}',null,this.value)">
-        <span style="font-family:var(--font-h);font-weight:700;font-size:14px;color:${achColor(ach)}">${ach!==null?ach+'%':'—'}</span>`;
+      const actType = isFy?'forecast':'actual';
+      const readonlyPlan = (!canPlan&&isMonth)?'readonly style="padding:6px 10px;opacity:.5"':'style="padding:6px 10px"';
+      html += `<input type="number" value="${pVal}" placeholder="0" ${readonlyPlan} oninput="setTrackVal('plan','${target.id}',null,this.value)">
+        <input type="number" value="${aVal}" placeholder="0" style="padding:6px 10px" oninput="setTrackVal('${actType}','${target.id}',null,this.value)">`;
     }
-    html+=`</div>`;
+    html += `<span style="font-family:var(--font-h);font-weight:700;font-size:14px;color:${achColor(ach)}">${achDisp}</span>`;
+    html += `</div>`;
 
-    if (isProject&&target.kpis?.length) {
-      target.kpis.forEach(kpi=>{
-        const kp=_trackPlans[target.id]?.[kpi.id]?.value??'';
-        const ka=_trackActuals[target.id]?.[kpi.id]?.value??'';
-        const kf=_trackForecasts[target.id]?.[kpi.id]?.fyForecast??'';
-        const kAch=kp!==''&&ka!==''&&kp>0?Math.round((ka/kp)*100):null;
-        html+=`<div style="display:grid;${cols};gap:10px;padding:9px 14px 9px 34px;border-top:1px solid var(--border);background:var(--bg3);align-items:center">
-          <div><div style="font-size:12px">${esc(kpi.name)}</div><div style="font-size:11px;color:var(--dim)">${kpi.unit||'value'} · ${kpi.weight}%</div></div>
-          <input type="number" value="${kp}" placeholder="0" style="padding:5px 9px;font-size:13px" ${!canPlan?'readonly style="padding:5px 9px;font-size:13px;opacity:.5"':''} oninput="setTrackVal('plan','${target.id}','${kpi.id}',this.value)">
-          <input type="number" value="${ka}" placeholder="0" style="padding:5px 9px;font-size:13px" oninput="setTrackVal('actual','${target.id}','${kpi.id}',this.value)">
-          <input type="number" value="${kf}" placeholder="0" style="padding:5px 9px;font-size:13px" oninput="setTrackVal('forecast','${target.id}','${kpi.id}',this.value)">
-          <span style="font-family:var(--font-h);font-weight:700;font-size:13px;color:${achColor(kAch)}">${kAch!==null?kAch+'%':'—'}</span>
-        </div>`;
+    if (isProject && target.kpis && target.kpis.length) {
+      target.kpis.forEach(function(kpi) {
+        const kdir = kpi.direction||'higher';
+        const kIsYN = kdir==='yesno';
+        const kp = _trackPlans[target.id] && _trackPlans[target.id][kpi.id] ? _trackPlans[target.id][kpi.id].value : '';
+        const ka = isFy
+          ? (_trackForecasts[target.id]&&_trackForecasts[target.id][kpi.id] ? _trackForecasts[target.id][kpi.id].fyForecast : '')
+          : (_trackActuals[target.id]&&_trackActuals[target.id][kpi.id]     ? _trackActuals[target.id][kpi.id].value         : '');
+        const kAch = kIsYN?(ka===''?null:ka>=1?100:0):(kp!==''&&ka!==''?calcKpiAch(parseFloat(ka),parseFloat(kp),kdir):null);
+        const kdIcon = kdir==='higher'?'↑':kdir==='lower'?'↓':'✓';
+        const kActType = isFy?'forecast':'actual';
+        const kAchDisp = kAch===null?'—':(kIsYN?(kAch>=100?'✓':'✗'):kAch+'%');
+        html += `<div style="display:grid;${cols};gap:10px;padding:9px 14px 9px 34px;border-top:1px solid var(--border);background:var(--bg3);align-items:center">
+          <div><div style="font-size:12px">${esc(kpi.name)} <span style="font-size:9px;color:var(--dim)">${kdIcon}</span></div><div style="font-size:11px;color:var(--dim)">${kpi.unit||'value'} · ${kpi.weight}%</div></div>`;
+        if (kIsYN) {
+          html += `<div style="color:var(--dim);font-size:12px">Yes / No</div>
+            <select style="padding:5px 9px;font-size:13px" onchange="setTrackVal('${kActType}','${target.id}','${kpi.id}',this.value)">
+              <option value="0" ${(ka==0||ka==='')?'selected':''}>No</option>
+              <option value="1" ${ka>=1?'selected':''}>Yes</option>
+            </select>`;
+        } else {
+          const kReadonly = (!canPlan&&isMonth)?'readonly style="padding:5px 9px;font-size:13px;opacity:.5"':'style="padding:5px 9px;font-size:13px"';
+          html += `<input type="number" value="${kp}" placeholder="0" ${kReadonly} oninput="setTrackVal('plan','${target.id}','${kpi.id}',this.value)">
+            <input type="number" value="${ka}" placeholder="0" style="padding:5px 9px;font-size:13px" oninput="setTrackVal('${kActType}','${target.id}','${kpi.id}',this.value)">`;
+        }
+        html += `<span style="font-family:var(--font-h);font-weight:700;font-size:13px;color:${achColor(kAch)}">${kAchDisp}</span></div>`;
       });
     }
-    html+=`</div>`;
+    html += `</div>`;
   });
 
-  html+=`</div>
-    <div style="margin-top:20px;display:flex;justify-content:flex-end">
-      <button class="btn btn-primary" onclick="saveTracking('${empId}',${month})" id="btn-save-track">💾 Save ${mLabel} Data</button>
-    </div>`;
-
+  const saveLabel = isFy?'FY Forecast':isYtd?'YTD':MONTHS[month-1];
+  html += `</div><div style="margin-top:20px;display:flex;justify-content:flex-end">`;
+  html += isYtd
+    ? `<span style="color:var(--muted);font-size:13px">YTD is read-only — edit individual months to update</span>`
+    : `<button class="btn btn-primary" onclick="saveTracking('${empId}','${period}')" id="btn-save-track">💾 Save ${saveLabel} Data</button>`;
+  html += `</div>`;
   document.getElementById('tracking-content').innerHTML = html;
 }
 
-function setTrackVal(type,targetId,kpiId,val) {
-  const v=parseFloat(val)||0;
-  if(type==='plan'){
-    if(kpiId){if(!_trackPlans[targetId])_trackPlans[targetId]={};_trackPlans[targetId][kpiId]={value:v};}
-    else _trackPlans[targetId]={...(_trackPlans[targetId]||{}),value:v};
-  }else if(type==='actual'){
-    if(kpiId){if(!_trackActuals[targetId])_trackActuals[targetId]={};_trackActuals[targetId][kpiId]={value:v};}
-    else _trackActuals[targetId]={...(_trackActuals[targetId]||{}),value:v};
-  }else{
-    if(kpiId){if(!_trackForecasts[targetId])_trackForecasts[targetId]={};_trackForecasts[targetId][kpiId]={fyForecast:v};}
-    else _trackForecasts[targetId]={...(_trackForecasts[targetId]||{}),fyForecast:v};
-  }
+async function saveTracking(empId, period) {
+  const year  = parseInt(document.getElementById('track-year').value);
+  const isFy  = period === 'fy';
+  const month = isFy ? CUR_MONTH : parseInt(period);
+  const btn   = document.getElementById('btn-save-track');
+  btn.textContent='Saving…'; btn.disabled=true;
+  const docId = `${empId}_${year}_${month}`;
+  const existing = await db.collection('actuals').doc(docId).get();
+  const base = existing.exists ? existing.data() : {empId,year,month};
+  await db.collection('actuals').doc(docId).set({
+    ...base,
+    actuals:   isFy ? (base.actuals||{})   : _trackActuals,
+    plans:     isFy ? (base.plans||{})     : _trackPlans,
+    forecasts: _trackForecasts,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  const label = isFy?'FY Forecast':MONTHS[month-1];
+  btn.textContent='✓ Saved!'; btn.style.background='var(--green)'; btn.style.color='#0a0c10';
+  setTimeout(function(){btn.textContent='💾 Save '+label+' Data';btn.style.background='';btn.style.color='';btn.disabled=false;},2500);
 }
 
-async function saveTracking(empId, month) {
-  const year=parseInt(document.getElementById('track-year').value);
-  const btn=document.getElementById('btn-save-track');
-  btn.textContent='Saving…'; btn.disabled=true;
-  await db.collection('actuals').doc(`${empId}_${year}_${month}`).set({
-    empId,year,month,
-    actuals:_trackActuals, plans:_trackPlans, forecasts:_trackForecasts,
-    updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-  });
-  btn.textContent='✓ Saved!'; btn.style.background='var(--green)'; btn.style.color='#0a0c10';
-  setTimeout(()=>{btn.textContent=`💾 Save ${MONTHS[month-1]} Data`;btn.style.background='';btn.style.color='';btn.disabled=false;},2500);
-}
+
 
 // ═══════════════════════════════════════════════════════
 // MY DASHBOARD (personal view)
