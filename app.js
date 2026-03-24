@@ -811,8 +811,8 @@ function renderTargetsList() {
     <div class="${ok?'weight-status weight-ok':'weight-status weight-bad'}" style="margin-bottom:14px">
       ${ok?'✓':'⚠'} Total weight: <strong>${total}%</strong>${!ok?' — must equal 100%':''}
     </div>
-    <div style="display:grid;grid-template-columns:24px 1fr 150px 100px 130px 90px 70px 80px;gap:8px;padding:4px 14px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">
-      <span>#</span><span>Target Name</span><span>Description</span><span>Type</span><span>FY Goal</span><span>Achievement</span><span>Weight%</span><span></span>
+    <div style="display:grid;grid-template-columns:20px 20px 1fr 140px 100px 120px 90px 70px auto;gap:7px;padding:4px 14px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">
+      <span></span><span></span><span>Target Name</span><span>Description</span><span>Type</span><span>FY Goal</span><span>Achievement</span><span>Weight%</span><span></span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">
       ${_targets.map((t,i) => renderTargetRow(t,i)).join('')}
@@ -823,28 +823,32 @@ function renderTargetsList() {
 }
 
 function renderTargetRow(t,i) {
-  const kpisBadge = t.kpis&&t.kpis.length>0?`<span style="color:var(--green);font-size:11px"> ${t.kpis.length}</span>`:'';
+  const kpisBadge = t.kpis&&t.kpis.length>0?'<span style="color:var(--green);font-size:11px"> '+t.kpis.length+'</span>':'';
+  const isFirst = i===0;
+  const isLast  = i===_targets.length-1;
   return `
     <div class="card-sm" id="trow-${t.id}">
-      <div style="display:grid;grid-template-columns:24px 1fr 150px 100px 130px 90px 70px 80px;gap:8px;align-items:center">
-        <span style="font-size:11px;color:var(--dim);font-weight:700">${i+1}</span>
-        <input value="${esc(t.name)}" placeholder="e.g. Revenue Growth" oninput="updateTarget('${t.id}','name',this.value)">
-        <input value="${esc(t.description||'')}" placeholder="Optional" oninput="updateTarget('${t.id}','description',this.value)">
+      <div style="display:grid;grid-template-columns:20px 20px 1fr 140px 100px 120px 90px 70px auto;gap:7px;align-items:center">
+        <!-- Up/Down arrows -->
+        <button class="icon-btn" onclick="moveTarget('${t.id}',-1)" style="font-size:14px;opacity:${isFirst?'0.2':'0.7'};padding:2px" ${isFirst?'disabled':''} title="Move up">↑</button>
+        <button class="icon-btn" onclick="moveTarget('${t.id}',1)"  style="font-size:14px;opacity:${isLast?'0.2':'0.7'};padding:2px" ${isLast?'disabled':''}  title="Move down">↓</button>
+        <input id="tn-${t.id}" value="${esc(t.name)}" placeholder="e.g. Revenue Growth" oninput="updateTarget('${t.id}','name',this.value)">
+        <input id="td-${t.id}" value="${esc(t.description||'')}" placeholder="Optional" oninput="updateTarget('${t.id}','description',this.value)">
         <select onchange="updateTarget('${t.id}','type',this.value)">
           <option value="kpi"     ${t.type==='kpi'?'selected':''}>Single KPI</option>
           <option value="project" ${t.type==='project'?'selected':''}>Project</option>
         </select>
-        <input value="${esc(t.fyGoal||t.unit||'')}" placeholder="e.g. $5M, 95%, 12" oninput="updateTarget('${t.id}','fyGoal',this.value)">
+        <input id="tg-${t.id}" value="${esc(t.fyGoal||t.unit||'')}" placeholder="e.g. $5M, 95%" oninput="updateTarget('${t.id}','fyGoal',this.value)">
         <select onchange="updateTarget('${t.id}','direction',this.value)" style="font-size:12px">
           <option value="gte" ${(t.direction||'gte')==='gte'?'selected':''}>≥ Equal or greater</option>
           <option value="lte" ${t.direction==='lte'?'selected':''}>≤ Equal or lower</option>
           <option value="yesno" ${t.direction==='yesno'?'selected':''}>✓ Yes / No</option>
         </select>
-        <input type="number" min="0" max="100" value="${t.weight}" oninput="updateTarget('${t.id}','weight',this.value)">
-        <div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="openMonthlyModal('${t.id}')" style="padding:4px 7px;font-size:11px" title="Monthly Goals">📅</button>
-          ${t.type==='project'?`<button class="btn btn-ghost btn-sm" onclick="openKpiModal('${t.id}')" style="padding:4px 7px;font-size:11px" title="KPIs">⚙️${kpisBadge}</button>`:''}
-          ${_targets.length>1?`<button class="icon-btn" onclick="removeTarget('${t.id}')">🗑️</button>`:''}
+        <input id="tw-${t.id}" type="number" min="0" max="100" value="${t.weight}" oninput="updateTarget('${t.id}','weight',this.value)">
+        <div style="display:flex;gap:3px;align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="openMonthlyModal('${t.id}')" style="padding:4px 7px;font-size:12px" title="Monthly Goals">📅</button>
+          ${t.type==='project'?`<button class="btn btn-ghost btn-sm" onclick="openKpiModal('${t.id}')" style="padding:4px 7px;font-size:12px" title="Configure KPIs">⚙️${kpisBadge}</button>`:''}
+          ${_targets.length>1?`<button class="icon-btn" onclick="removeTarget('${t.id}')" style="color:var(--dim)" title="Delete">🗑️</button>`:''}
         </div>
       </div>
       ${t.type==='project'&&t.kpis&&t.kpis.length>0?`
@@ -858,17 +862,66 @@ function renderTargetRow(t,i) {
     </div>`;
 }
 
-function updateTarget(id,field,value) {
-  _targets = _targets.map(t => t.id===id ? {...t,[field]:field==='weight'?(parseFloat(value)||0):value} : t);
+function syncTargetsFromDOM() {
+  // Preserve any typed-but-not-saved text values before re-rendering
+  _targets = _targets.map(t => {
+    const nameEl  = document.getElementById('tn-'+t.id);
+    const descEl  = document.getElementById('td-'+t.id);
+    const goalEl  = document.getElementById('tg-'+t.id);
+    const wEl     = document.getElementById('tw-'+t.id);
+    return {
+      ...t,
+      name:        nameEl ? nameEl.value        : t.name,
+      description: descEl ? descEl.value        : t.description,
+      fyGoal:      goalEl ? goalEl.value        : t.fyGoal,
+      weight:      wEl    ? (parseFloat(wEl.value)||0) : t.weight,
+    };
+  });
+}
+
+function updateTarget(id, field, value) {
+  syncTargetsFromDOM();
+  _targets = _targets.map(t => t.id===id
+    ? {...t, [field]: field==='weight' ? (parseFloat(value)||0) : value}
+    : t
+  );
+  // Re-render just weight bar for most fields, full list for type change (shows/hides gear icon)
+  if (field === 'type') {
+    renderTargetsList();
+    return;
+  }
   const total = _targets.reduce((s,t)=>s+(parseFloat(t.weight)||0),0);
   const ok = Math.abs(total-100)<0.01;
   const ws = document.querySelector('.weight-status');
   if (ws) { ws.className=`weight-status ${ok?'weight-ok':'weight-bad'}`; ws.innerHTML=`${ok?'✓':'⚠'} Total weight: <strong>${total}%</strong>${!ok?' — must equal 100%':''}`; }
 }
 
-function addTarget() { if(_targets.length>=5)return; _targets.push(blankTarget()); renderTargetsList(); }
-function removeTarget(id) { _targets=_targets.filter(t=>t.id!==id); renderTargetsList(); }
+function addTarget() {
+  syncTargetsFromDOM();
+  if(_targets.length>=5) return;
+  _targets.push(blankTarget());
+  renderTargetsList();
+}
+function removeTarget(id) {
+  syncTargetsFromDOM();
+  _targets=_targets.filter(t=>t.id!==id);
+  renderTargetsList();
+}
+function moveTarget(id, dir) {
+  syncTargetsFromDOM();
+  const idx = _targets.findIndex(t => t.id === id);
+  if (idx < 0) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= _targets.length) return;
+  const arr = [..._targets];
+  const tmp = arr[idx];
+  arr[idx] = arr[newIdx];
+  arr[newIdx] = tmp;
+  _targets = arr;
+  renderTargetsList();
+}
 function distributeTargetWeights() {
+  syncTargetsFromDOM();
   const w=Math.floor(100/_targets.length), rem=100-w*_targets.length;
   _targets=_targets.map((t,i)=>({...t,weight:i===0?w+rem:w}));
   renderTargetsList();
@@ -947,108 +1000,107 @@ async function openMonthlyModal(targetId) {
   document.getElementById('modal-monthly').classList.add('open');
 }
 
+function tlDropdown(curAutoTL, overrideTL, onchangeCall) {
+  // Shows ONE traffic light: the override if set, else auto. No duplication.
+  const displayed = overrideTL || curAutoTL || '';
+  return '<div style="display:flex;align-items:center;gap:6px;justify-content:center">'
+    + '<span style="font-size:20px;min-width:24px;text-align:center">' + (displayed || '—') + '</span>'
+    + '<select style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:11px;padding:3px 6px;color:var(--muted);cursor:pointer" onchange="' + onchangeCall + '">'
+    + '<option value="" ' + (!overrideTL?'selected':'') + '>auto</option>'
+    + '<option value="🟢" ' + (overrideTL==='🟢'?'selected':'') + '>🟢 Override</option>'
+    + '<option value="🟡" ' + (overrideTL==='🟡'?'selected':'') + '>🟡 Override</option>'
+    + '<option value="🔴" ' + (overrideTL==='🔴'?'selected':'') + '>🔴 Override</option>'
+    + '</select>'
+    + '</div>';
+}
+
 function renderMonthlyModal(target, empId, year) {
   document.getElementById('modal-monthly-title').textContent = '📅 Monthly Goals: ' + (target.name || 'Target');
-  const dir = target.direction || 'gte';
+  const dir  = target.direction || 'gte';
   const isYN = dir === 'yesno';
 
-  // Compute YTD
+  // Compute YTD (sum through current month)
   let ytdGoal = 0, ytdActual = 0;
-  for (let m = 1; m <= CUR_MONTH; m++) {
-    ytdGoal   += parseFloat(_monthlyData[m]?.goal   || 0);
-    ytdActual += parseFloat(_monthlyData[m]?.actual || 0);
+  for (var m = 1; m <= CUR_MONTH; m++) {
+    ytdGoal   += parseFloat(_monthlyData[m] && _monthlyData[m].goal   ? _monthlyData[m].goal   : 0);
+    ytdActual += parseFloat(_monthlyData[m] && _monthlyData[m].actual ? _monthlyData[m].actual : 0);
   }
-  const ytdTL = trafficLight(ytdActual, ytdGoal, dir);
+  const ytdAutoTL     = trafficLight(ytdActual, ytdGoal, dir);
+  const ytdOverrideTL = _monthlyData['ytd'] ? (_monthlyData['ytd'].tl || '') : '';
 
-  // FY Forecast (last available)
-  let fyForecast = '';
-  for (let m = 12; m >= 1; m--) {
-    if (_monthlyData[m]?.fyForecast !== '') { fyForecast = _monthlyData[m].fyForecast; break; }
+  // FY Forecast — find latest entered value
+  var fyForecast = '';
+  for (var fm = 12; fm >= 1; fm--) {
+    if (_monthlyData[fm] && _monthlyData[fm].fyForecast !== '' && _monthlyData[fm].fyForecast !== undefined) {
+      fyForecast = _monthlyData[fm].fyForecast; break;
+    }
   }
-  const fyTL = trafficLight(fyForecast, ytdGoal, dir);
+  // FY goal = target.fyGoal (the annual target set on the target itself)
+  const fyGoal        = target.fyGoal || '';
+  const fyAutoTL      = trafficLight(fyForecast, fyGoal, dir);
+  const fyOverrideTL  = _monthlyData['fy'] ? (_monthlyData['fy'].tl || '') : '';
 
-  let rows = '';
-  for (let m = 1; m <= 12; m++) {
-    const d     = _monthlyData[m];
-    const autoTL = trafficLight(d.actual, d.goal, dir);
-    const curTL  = d.tl || autoTL;
-    const isPast = m <= CUR_MONTH;
-    rows += `
-      <tr style="${!isPast?'opacity:.5':''}">
-        <td style="font-weight:600;color:var(--muted);width:50px">${MONTHS[m-1]}</td>
-        <td>${isYN
+  var rows = '';
+  for (var mo = 1; mo <= 12; mo++) {
+    const d       = _monthlyData[mo] || {goal:'', actual:'', tl:''};
+    const autoTL  = trafficLight(d.actual, d.goal, dir);
+    const overTL  = d.tl || '';
+    const isPast  = mo <= CUR_MONTH;
+    const mIdx    = mo; // capture for closure
+    var gVal = (d.goal===undefined||d.goal===null) ? '' : String(d.goal);
+    var aVal = (d.actual===undefined||d.actual===null) ? '' : String(d.actual);
+    rows += '<tr style="' + (!isPast?'opacity:.45':'') + '">'
+      + '<td style="padding:7px 8px;font-weight:600;color:var(--muted);width:46px">' + MONTHS[mo-1] + '</td>'
+      + '<td style="padding:4px 6px">' + (isYN
           ? '<span style="color:var(--dim);font-size:12px">Yes/No</span>'
-          : `<input type="text" value="${esc(String(d.goal))}" placeholder="—"
-              style="padding:5px 8px;font-size:13px;width:100%"
-              onchange="setMonthlyVal(${m},'goal',this.value)">`
-        }</td>
-        <td>${isYN
-          ? `<select style="padding:5px 8px;font-size:13px;width:100%" onchange="setMonthlyVal(${m},'actual',this.value)">
-               <option value="0" ${(d.actual==0||d.actual==='')?'selected':''}>No</option>
-               <option value="1" ${d.actual>=1?'selected':''}>Yes</option>
-             </select>`
-          : `<input type="text" value="${esc(String(d.actual))}" placeholder="—"
-               style="padding:5px 8px;font-size:13px;width:100%"
-               onchange="setMonthlyVal(${m},'actual',this.value)">`
-        }</td>
-        <td style="text-align:center">
-          <select style="background:none;border:none;font-size:18px;cursor:pointer;padding:2px"
-            onchange="setMonthlyVal(${m},'tl',this.value)">
-            <option value=""   ${curTL===''  ?'selected':''}>auto</option>
-            <option value="🟢" ${curTL==='🟢'?'selected':''}>🟢</option>
-            <option value="🟡" ${curTL==='🟡'?'selected':''}>🟡</option>
-            <option value="🔴" ${curTL==='🔴'?'selected':''}>🔴</option>
-          </select>
-          <span style="font-size:18px">${autoTL}</span>
-        </td>
-      </tr>`;
+          : '<input type="text" value="' + esc(gVal) + '" placeholder="—" style="padding:5px 8px;font-size:13px;width:100%" onchange="setMonthlyVal(' + mIdx + ',\'goal\',this.value)">'
+        ) + '</td>'
+      + '<td style="padding:4px 6px">' + (isYN
+          ? '<select style="padding:5px 8px;font-size:13px;width:100%" onchange="setMonthlyVal(' + mIdx + ',\'actual\',this.value)"><option value="0" ' + ((d.actual==0||d.actual==='')?'selected':'') + '>No</option><option value="1" ' + (d.actual>=1?'selected':'') + '>Yes</option></select>'
+          : '<input type="text" value="' + esc(aVal) + '" placeholder="—" style="padding:5px 8px;font-size:13px;width:100%" onchange="setMonthlyVal(' + mIdx + ',\'actual\',this.value)">'
+        ) + '</td>'
+      + '<td style="padding:4px 8px;text-align:center">'
+        + tlDropdown(autoTL, overTL, 'setMonthlyVal(' + mIdx + ',\'tl\',this.value)')
+      + '</td>'
+      + '</tr>';
   }
 
-  document.getElementById('modal-monthly-body').innerHTML = `
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--border)">
-            <th style="padding:6px 8px;text-align:left">Month</th>
-            <th style="padding:6px 8px;text-align:left">Goal</th>
-            <th style="padding:6px 8px;text-align:left">Actual</th>
-            <th style="padding:6px 8px;text-align:center">Status</th>
-          </tr>
-        </thead>
-        <tbody id="monthly-rows">${rows}</tbody>
-        <tfoot>
-          <tr style="border-top:2px solid var(--border);background:var(--bg3)">
-            <td style="padding:8px;font-weight:700;color:var(--accent)">YTD</td>
-            <td style="padding:8px;font-weight:600">${isYN?'—':ytdGoal||'—'}</td>
-            <td style="padding:8px;font-weight:600">${isYN?'—':ytdActual||'—'}</td>
-            <td style="padding:8px;text-align:center;font-size:18px">${ytdTL||'—'}</td>
-          </tr>
-          <tr style="background:var(--bg3)">
-            <td style="padding:8px;font-weight:700;color:var(--purple)">FY Forecast</td>
-            <td style="padding:8px;color:var(--muted)">${target.fyGoal||'—'}</td>
-            <td style="padding:8px">
-              ${isYN
-                ? `<select style="padding:5px 8px;font-size:13px" onchange="setFyForecast(this.value)">
-                     <option value="0" ${(fyForecast==0||fyForecast==='')?'selected':''}>No</option>
-                     <option value="1" ${fyForecast>=1?'selected':''}>Yes</option>
-                   </select>`
-                : `<input type="text" value="${esc(String(fyForecast))}" placeholder="FY forecast"
-                     style="padding:5px 8px;font-size:13px;width:120px"
-                     onchange="setFyForecast(this.value)">`
-              }
-            </td>
-            <td style="padding:8px;text-align:center;font-size:18px">${fyTL||'—'}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>`;
+  document.getElementById('modal-monthly-body').innerHTML =
+    '<div style="overflow-x:auto">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--border)">'
+    + '<th style="padding:6px 8px;text-align:left;width:46px">Month</th>'
+    + '<th style="padding:6px 8px;text-align:left">Goal</th>'
+    + '<th style="padding:6px 8px;text-align:left">Actual</th>'
+    + '<th style="padding:6px 8px;text-align:center;width:140px">Status</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '<tfoot>'
+    // YTD row
+    + '<tr style="border-top:2px solid var(--border);background:var(--bg3)">'
+    + '<td style="padding:8px;font-weight:700;color:var(--accent)">YTD</td>'
+    + '<td style="padding:8px;font-weight:600">' + (isYN?'—':(ytdGoal||'—')) + '</td>'
+    + '<td style="padding:8px;font-weight:600">' + (isYN?'—':(ytdActual||'—')) + '</td>'
+    + '<td style="padding:8px">' + tlDropdown(ytdAutoTL, ytdOverrideTL, "setMonthlyVal('ytd','tl',this.value)") + '</td>'
+    + '</tr>'
+    // FY Forecast row
+    + '<tr style="background:var(--bg3)">'
+    + '<td style="padding:8px;font-weight:700;color:var(--purple)">FY<br>Forecast</td>'
+    + '<td style="padding:8px;color:var(--muted);font-size:12px">' + esc(String(fyGoal||'—')) + '<br><span style="color:var(--dim);font-size:10px">FY Target</span></td>'
+    + '<td style="padding:8px">' + (isYN
+        ? '<select style="padding:5px 8px;font-size:13px" onchange="setFyForecast(this.value)"><option value="0" ' + ((fyForecast==0||fyForecast==='')?'selected':'') + '>No</option><option value="1" ' + (fyForecast>=1?'selected':'') + '>Yes</option></select>'
+        : '<input type="text" value="' + esc(String(fyForecast)) + '" placeholder="Enter FY forecast" style="padding:5px 8px;font-size:13px;width:140px" onchange="setFyForecast(this.value)">'
+      ) + '</td>'
+    + '<td style="padding:8px">' + tlDropdown(fyAutoTL, fyOverrideTL, "setMonthlyVal('fy','tl',this.value)") + '</td>'
+    + '</tr>'
+    + '</tfoot>'
+    + '</table></div>';
 }
 
 function setMonthlyVal(month, field, value) {
   if (!_monthlyData[month]) _monthlyData[month] = {};
   _monthlyData[month][field] = value;
-  // Re-render just the traffic light cell
-  const target = _targets.find(t => t.id === _monthlyTargetId);
+  const target = _targets.find(function(t){ return t.id === _monthlyTargetId; });
   if (target) renderMonthlyModal(target,
     document.getElementById('target-emp').value,
     parseInt(document.getElementById('target-year').value)
@@ -1062,33 +1114,45 @@ function setFyForecast(value) {
 }
 
 async function saveMonthlyData() {
-  const empId  = document.getElementById('target-emp').value;
-  const year   = parseInt(document.getElementById('target-year').value);
-  const tId    = _monthlyTargetId;
-  const btn    = document.getElementById('btn-save-monthly');
+  const empId = document.getElementById('target-emp').value;
+  const year  = parseInt(document.getElementById('target-year').value);
+  const tId   = _monthlyTargetId;
+  const btn   = document.getElementById('btn-save-monthly');
   btn.textContent = 'Saving…'; btn.disabled = true;
 
-  // Save each month individually
-  const saves = Object.entries(_monthlyData).map(async ([m, d]) => {
-    const docId = `${empId}_${year}_${m}`;
+  // Save months 1-12
+  const monthEntries = Object.entries(_monthlyData).filter(function(e){ return !isNaN(parseInt(e[0])); });
+  const saves = monthEntries.map(async function(entry) {
+    const m = entry[0], d = entry[1];
+    const docId = empId + '_' + year + '_' + m;
     const snap  = await db.collection('actuals').doc(docId).get();
     const base  = snap.exists ? snap.data() : { empId, year, month: parseInt(m) };
-
-    const actuals   = { ...(base.actuals   || {}), [tId]: { value: parseFloat(d.actual) || 0 } };
-    const plans     = { ...(base.plans     || {}), [tId]: { value: parseFloat(d.goal)   || 0 } };
-    const forecasts = { ...(base.forecasts || {}), [tId]: { fyForecast: parseFloat(d.fyForecast) || 0 } };
-    const tlOver    = { ...(base.trafficOverride || {}), [tId]: d.tl || '' };
-
-    return db.collection('actuals').doc(docId).set({
-      ...base, actuals, plans, forecasts,
-      trafficOverride: tlOver,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    const actuals   = Object.assign({}, base.actuals   || {}, {[tId]: { value: parseFloat(d.actual)||0 }});
+    const plans     = Object.assign({}, base.plans     || {}, {[tId]: { value: parseFloat(d.goal)||0 }});
+    const forecasts = Object.assign({}, base.forecasts || {}, {[tId]: { fyForecast: parseFloat(d.fyForecast)||0 }});
+    const tlOver    = Object.assign({}, base.trafficOverride || {}, {[tId]: d.tl || ''});
+    return db.collection('actuals').doc(docId).set(
+      Object.assign({}, base, { actuals, plans, forecasts, trafficOverride: tlOver,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    );
   });
+
+  // Save YTD + FY override traffic lights separately in a meta doc
+  const metaId = empId + '_' + year + '_meta';
+  const metaSnap = await db.collection('actuals').doc(metaId).get();
+  const metaBase = metaSnap.exists ? metaSnap.data() : { empId, year, type:'meta' };
+  const ytdTlOver = Object.assign({}, metaBase.ytdTrafficOverride || {});
+  const fyTlOver  = Object.assign({}, metaBase.fyTrafficOverride  || {});
+  if (_monthlyData['ytd']) ytdTlOver[tId] = _monthlyData['ytd'].tl || '';
+  if (_monthlyData['fy'])  fyTlOver[tId]  = _monthlyData['fy'].tl  || '';
+  saves.push(db.collection('actuals').doc(metaId).set(
+    Object.assign({}, metaBase, { ytdTrafficOverride: ytdTlOver, fyTrafficOverride: fyTlOver,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+  ));
 
   await Promise.all(saves);
   btn.textContent = '✓ Saved!'; btn.style.background = 'var(--green)'; btn.style.color = '#0a0c10';
-  setTimeout(() => {
+  setTimeout(function() {
     btn.textContent = 'Save'; btn.style.background=''; btn.style.color=''; btn.disabled=false;
     document.getElementById('modal-monthly').classList.remove('open');
   }, 1500);
