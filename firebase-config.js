@@ -1,5 +1,6 @@
 // firebase-config.js
 // Replace with your Firebase project values
+
 const firebaseConfig = {
   apiKey:            "AIzaSyDwd36NyDLimjEFtDWhD4waZ7VhjsaLrC4",
   authDomain:        "dbpulsepoint.firebaseapp.com",
