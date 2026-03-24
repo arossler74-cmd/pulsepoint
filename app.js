@@ -410,7 +410,8 @@ async function loadDepartmentsPage() {
       <tbody>
         ${_departments.map(d => {
           const count = _employees.filter(e=>e.department===d.name).length;
-          return '<tr><td style="font-weight:500">'+esc(d.name)+'</td><td style="color:var(--muted)">'+count+' member'+(count!==1?'s':'')+'</td><td><div style="display:flex;gap:6px"><button class="btn btn-ghost btn-xs" onclick="openDeptEditModal(''+d.name+'')">Edit</button><button class="btn btn-danger btn-xs" onclick="deleteDept(''+d.id+'',''+esc(d.name)+'')">Delete</button></div></td></tr>';
+          const dName = esc(d.name).replace(/'/g,"\\'");
+          return `<tr><td style="font-weight:500">${esc(d.name)}</td><td style="color:var(--muted)">${count} member${count!==1?'s':''}</td><td><div style="display:flex;gap:6px"><button class="btn btn-ghost btn-xs" onclick="openDeptEditModal('${dName}')">Edit</button><button class="btn btn-danger btn-xs" onclick="deleteDept('${d.id}','${dName}')">Delete</button></div></td></tr>`;
         }).join('')}
       </tbody>
     </table>
