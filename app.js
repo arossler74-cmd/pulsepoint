@@ -7,6 +7,7 @@ const NOW        = new Date();
 const CUR_MONTH  = NOW.getMonth() + 1;
 const CUR_YEAR   = NOW.getFullYear();
 
+
 // ── Default permissions (stored in Firestore, editable by Developer) ──
 const DEFAULT_PERMISSIONS = {
   developer: {
