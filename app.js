@@ -7,7 +7,6 @@ const NOW        = new Date();
 const CUR_MONTH  = NOW.getMonth() + 1;
 const CUR_YEAR   = NOW.getFullYear();
 
-
 // ── Default permissions (stored in Firestore, editable by Developer) ──
 const DEFAULT_PERMISSIONS = {
   developer: {
@@ -88,37 +87,37 @@ let _trackTargets  = [];
 // INVITE LINK HANDLER (runs before auth check)
 // ═══════════════════════════════════════════════════════
 (function checkInviteLink() {
-  const params = new URLSearchParams(window.location.search);
-  const token  = params.get('invite');
+  var token = null;
+  try {
+    var params = new URLSearchParams(window.location.search);
+    token = params.get('invite');
+    if (!token && window.location.hash) {
+      var h = window.location.hash.replace(/^#\/?/, '');
+      var hp = new URLSearchParams(h.includes('?') ? h.split('?')[1] : h);
+      token = hp.get('invite');
+    }
+  } catch(e) { return; }
   if (!token) return;
 
-  // Show invite screen immediately
   document.getElementById('invite-screen').classList.add('open');
   document.getElementById('login-screen').classList.add('hidden');
 
-  // Load invite data from Firestore
-  db.collection('invites').doc(token).get().then(snap => {
+  db.collection('invites').doc(token).get().then(function(snap) {
     if (!snap.exists) {
-      showInviteError('This invite link is invalid or has expired.');
+      showInviteError('Invite link invalid or expired. (token: ' + token + ')');
       return;
     }
-    const inv = snap.data();
-    if (inv.used) {
-      showInviteError('This invite link has already been used.');
-      return;
-    }
-    if (inv.expiresAt && inv.expiresAt.toDate() < new Date()) {
-      showInviteError('This invite link has expired.');
-      return;
-    }
+    var inv = snap.data();
+    if (inv.used) { showInviteError('This invite link has already been used.'); return; }
+    if (inv.expiresAt && inv.expiresAt.toDate() < new Date()) { showInviteError('This invite link has expired.'); return; }
     document.getElementById('invite-email').value = inv.email;
-    document.getElementById('invite-title').textContent = `Welcome to PulsePoint!`;
-    document.getElementById('invite-subtitle').textContent = `Set a password for ${inv.email} to activate your ${inv.role} account.`;
-
-    // Store token for use during activation
+    document.getElementById('invite-title').textContent = 'Welcome to ALVINT!';
+    document.getElementById('invite-subtitle').textContent = 'Set a password for ' + inv.email + ' to activate your ' + inv.role + ' account.';
     window._inviteToken = token;
     window._inviteData  = inv;
-  }).catch(() => showInviteError('Could not load invite. Please try again.'));
+  }).catch(function(err) {
+    showInviteError('Could not load invite. ' + (err.message || err.code || 'Check Firestore rules.') + ' (token: ' + token + ')');
+  });
 })();
 
 function showInviteError(msg) {
@@ -788,7 +787,7 @@ async function loadTargets() {
   renderTargetsList();
 }
 
-function blankTarget() { return { id: uid(), name:'', type:'kpi', weight:0, unit:'', description:'', kpis:[] }; }
+function blankTarget() { return { id: uid(), name:'', type:'kpi', weight:0, fyGoal:'', description:'', kpis:[], direction:'gte' }; }
 function uid() { return Math.random().toString(36).slice(2,10); }
 
 function renderTargetsList() {
@@ -812,8 +811,8 @@ function renderTargetsList() {
     <div class="${ok?'weight-status weight-ok':'weight-status weight-bad'}" style="margin-bottom:14px">
       ${ok?'✓':'⚠'} Total weight: <strong>${total}%</strong>${!ok?' — must equal 100%':''}
     </div>
-    <div style="display:grid;grid-template-columns:24px 1fr 1fr 110px 70px 80px 80px;gap:10px;padding:4px 14px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">
-      <span>#</span><span>Target Name</span><span>Description</span><span>Type</span><span>Unit</span><span>Weight %</span><span></span>
+    <div style="display:grid;grid-template-columns:24px 1fr 150px 100px 130px 90px 70px 80px;gap:8px;padding:4px 14px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">
+      <span>#</span><span>Target Name</span><span>Description</span><span>Type</span><span>FY Goal</span><span>Achievement</span><span>Weight%</span><span></span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">
       ${_targets.map((t,i) => renderTargetRow(t,i)).join('')}
@@ -824,29 +823,35 @@ function renderTargetsList() {
 }
 
 function renderTargetRow(t,i) {
+  const kpisBadge = t.kpis&&t.kpis.length>0?`<span style="color:var(--green);font-size:11px"> ${t.kpis.length}</span>`:'';
   return `
     <div class="card-sm" id="trow-${t.id}">
-      <div style="display:grid;grid-template-columns:24px 1fr 1fr 110px 70px 80px 80px;gap:10px;align-items:center">
+      <div style="display:grid;grid-template-columns:24px 1fr 150px 100px 130px 90px 70px 80px;gap:8px;align-items:center">
         <span style="font-size:11px;color:var(--dim);font-weight:700">${i+1}</span>
-        <input value="${esc(t.name)}" placeholder="e.g. DC Capacity" oninput="updateTarget('${t.id}','name',this.value)">
+        <input value="${esc(t.name)}" placeholder="e.g. Revenue Growth" oninput="updateTarget('${t.id}','name',this.value)">
         <input value="${esc(t.description||'')}" placeholder="Optional" oninput="updateTarget('${t.id}','description',this.value)">
         <select onchange="updateTarget('${t.id}','type',this.value)">
           <option value="kpi"     ${t.type==='kpi'?'selected':''}>Single KPI</option>
           <option value="project" ${t.type==='project'?'selected':''}>Project</option>
         </select>
-        <input value="${esc(t.unit||'')}" placeholder="%, $" oninput="updateTarget('${t.id}','unit',this.value)">
+        <input value="${esc(t.fyGoal||t.unit||'')}" placeholder="e.g. $5M, 95%, 12" oninput="updateTarget('${t.id}','fyGoal',this.value)">
+        <select onchange="updateTarget('${t.id}','direction',this.value)" style="font-size:12px">
+          <option value="gte" ${(t.direction||'gte')==='gte'?'selected':''}>≥ Equal or greater</option>
+          <option value="lte" ${t.direction==='lte'?'selected':''}>≤ Equal or lower</option>
+          <option value="yesno" ${t.direction==='yesno'?'selected':''}>✓ Yes / No</option>
+        </select>
         <input type="number" min="0" max="100" value="${t.weight}" oninput="updateTarget('${t.id}','weight',this.value)">
-        <div style="display:flex;gap:4px;align-items:center">
-          ${t.type==='project'?`<button class="btn btn-ghost btn-sm" onclick="openKpiModal('${t.id}')" style="padding:4px 8px">⚙️${t.kpis?.length>0?` <span style="color:var(--green)">${t.kpis.length}</span>`:''}</button>`:''}
+        <div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="openMonthlyModal('${t.id}')" style="padding:4px 7px;font-size:11px" title="Monthly Goals">📅</button>
+          ${t.type==='project'?`<button class="btn btn-ghost btn-sm" onclick="openKpiModal('${t.id}')" style="padding:4px 7px;font-size:11px" title="KPIs">⚙️${kpisBadge}</button>`:''}
           ${_targets.length>1?`<button class="icon-btn" onclick="removeTarget('${t.id}')">🗑️</button>`:''}
         </div>
       </div>
-      ${t.type==='project'&&t.kpis?.length>0?`
+      ${t.type==='project'&&t.kpis&&t.kpis.length>0?`
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
           ${t.kpis.map(k=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
             <span style="color:var(--dim);font-size:11px">›</span>
             <span style="font-size:12px;flex:1;color:var(--muted)">${esc(k.name)}</span>
-            ${k.unit?`<span style="font-size:11px;color:var(--dim)">${esc(k.unit)}</span>`:''}
             <span class="badge" style="background:rgba(99,179,237,.1);color:var(--accent)">${k.weight}%</span>
           </div>`).join('')}
         </div>`:''}
@@ -882,37 +887,320 @@ async function saveTargets() {
   setTimeout(()=>{btn.textContent='Save Targets';btn.style.background='';btn.style.color='';btn.disabled=false;},2500);
 }
 
+
+// ═══════════════════════════════════════════════════════
+// TRAFFIC LIGHT + MONTHLY GOALS MODAL
+// ═══════════════════════════════════════════════════════
+let _monthlyTargetId = null;
+let _monthlyData     = {};  // { month: { goal, actual, fyForecast, tl } }
+
+function trafficLight(actual, goal, direction) {
+  if (goal === '' || goal === null || goal === undefined) return '';
+  const g = parseFloat(goal);
+  if (isNaN(g) || g === 0) return '';
+  let pct;
+  if (direction === 'yesno') {
+    pct = (actual >= 1) ? 100 : 0;
+  } else if (direction === 'lte') {
+    if (parseFloat(actual) === 0) return '🟢';
+    pct = (g / parseFloat(actual)) * 100;
+  } else {
+    pct = (parseFloat(actual) / g) * 100;
+  }
+  if (isNaN(pct)) return '';
+  if (pct >= 100) return '🟢';
+  if (pct >= 80)  return '🟡';
+  return '🔴';
+}
+
+function tlOverride(m, auto) {
+  return _monthlyData[m] && _monthlyData[m].tl ? _monthlyData[m].tl : auto;
+}
+
+async function openMonthlyModal(targetId) {
+  _monthlyTargetId = targetId;
+  const target = _targets.find(t => t.id === targetId);
+  if (!target) return;
+
+  const empId = document.getElementById('target-emp').value;
+  const year  = parseInt(document.getElementById('target-year').value);
+
+  // Load all monthly actuals
+  const snaps = await Promise.all(
+    Array.from({length:12}, (_, i) =>
+      db.collection('actuals').doc(`${empId}_${year}_${i+1}`).get()
+    )
+  );
+
+  _monthlyData = {};
+  snaps.forEach((snap, i) => {
+    const m = i + 1;
+    const d = snap.exists ? snap.data() : {};
+    const actual = d.actuals && d.actuals[targetId] ? d.actuals[targetId].value : '';
+    const goal   = d.plans   && d.plans[targetId]   ? d.plans[targetId].value   : '';
+    const fyF    = d.forecasts && d.forecasts[targetId] ? d.forecasts[targetId].fyForecast : '';
+    const tl     = d.trafficOverride && d.trafficOverride[targetId] ? d.trafficOverride[targetId] : '';
+    _monthlyData[m] = { goal, actual, fyForecast: fyF, tl };
+  });
+
+  renderMonthlyModal(target, empId, year);
+  document.getElementById('modal-monthly').classList.add('open');
+}
+
+function renderMonthlyModal(target, empId, year) {
+  document.getElementById('modal-monthly-title').textContent = '📅 Monthly Goals: ' + (target.name || 'Target');
+  const dir = target.direction || 'gte';
+  const isYN = dir === 'yesno';
+
+  // Compute YTD
+  let ytdGoal = 0, ytdActual = 0;
+  for (let m = 1; m <= CUR_MONTH; m++) {
+    ytdGoal   += parseFloat(_monthlyData[m]?.goal   || 0);
+    ytdActual += parseFloat(_monthlyData[m]?.actual || 0);
+  }
+  const ytdTL = trafficLight(ytdActual, ytdGoal, dir);
+
+  // FY Forecast (last available)
+  let fyForecast = '';
+  for (let m = 12; m >= 1; m--) {
+    if (_monthlyData[m]?.fyForecast !== '') { fyForecast = _monthlyData[m].fyForecast; break; }
+  }
+  const fyTL = trafficLight(fyForecast, ytdGoal, dir);
+
+  let rows = '';
+  for (let m = 1; m <= 12; m++) {
+    const d     = _monthlyData[m];
+    const autoTL = trafficLight(d.actual, d.goal, dir);
+    const curTL  = d.tl || autoTL;
+    const isPast = m <= CUR_MONTH;
+    rows += `
+      <tr style="${!isPast?'opacity:.5':''}">
+        <td style="font-weight:600;color:var(--muted);width:50px">${MONTHS[m-1]}</td>
+        <td>${isYN
+          ? '<span style="color:var(--dim);font-size:12px">Yes/No</span>'
+          : `<input type="text" value="${esc(String(d.goal))}" placeholder="—"
+              style="padding:5px 8px;font-size:13px;width:100%"
+              onchange="setMonthlyVal(${m},'goal',this.value)">`
+        }</td>
+        <td>${isYN
+          ? `<select style="padding:5px 8px;font-size:13px;width:100%" onchange="setMonthlyVal(${m},'actual',this.value)">
+               <option value="0" ${(d.actual==0||d.actual==='')?'selected':''}>No</option>
+               <option value="1" ${d.actual>=1?'selected':''}>Yes</option>
+             </select>`
+          : `<input type="text" value="${esc(String(d.actual))}" placeholder="—"
+               style="padding:5px 8px;font-size:13px;width:100%"
+               onchange="setMonthlyVal(${m},'actual',this.value)">`
+        }</td>
+        <td style="text-align:center">
+          <select style="background:none;border:none;font-size:18px;cursor:pointer;padding:2px"
+            onchange="setMonthlyVal(${m},'tl',this.value)">
+            <option value=""   ${curTL===''  ?'selected':''}>auto</option>
+            <option value="🟢" ${curTL==='🟢'?'selected':''}>🟢</option>
+            <option value="🟡" ${curTL==='🟡'?'selected':''}>🟡</option>
+            <option value="🔴" ${curTL==='🔴'?'selected':''}>🔴</option>
+          </select>
+          <span style="font-size:18px">${autoTL}</span>
+        </td>
+      </tr>`;
+  }
+
+  document.getElementById('modal-monthly-body').innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--border)">
+            <th style="padding:6px 8px;text-align:left">Month</th>
+            <th style="padding:6px 8px;text-align:left">Goal</th>
+            <th style="padding:6px 8px;text-align:left">Actual</th>
+            <th style="padding:6px 8px;text-align:center">Status</th>
+          </tr>
+        </thead>
+        <tbody id="monthly-rows">${rows}</tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);background:var(--bg3)">
+            <td style="padding:8px;font-weight:700;color:var(--accent)">YTD</td>
+            <td style="padding:8px;font-weight:600">${isYN?'—':ytdGoal||'—'}</td>
+            <td style="padding:8px;font-weight:600">${isYN?'—':ytdActual||'—'}</td>
+            <td style="padding:8px;text-align:center;font-size:18px">${ytdTL||'—'}</td>
+          </tr>
+          <tr style="background:var(--bg3)">
+            <td style="padding:8px;font-weight:700;color:var(--purple)">FY Forecast</td>
+            <td style="padding:8px;color:var(--muted)">${target.fyGoal||'—'}</td>
+            <td style="padding:8px">
+              ${isYN
+                ? `<select style="padding:5px 8px;font-size:13px" onchange="setFyForecast(this.value)">
+                     <option value="0" ${(fyForecast==0||fyForecast==='')?'selected':''}>No</option>
+                     <option value="1" ${fyForecast>=1?'selected':''}>Yes</option>
+                   </select>`
+                : `<input type="text" value="${esc(String(fyForecast))}" placeholder="FY forecast"
+                     style="padding:5px 8px;font-size:13px;width:120px"
+                     onchange="setFyForecast(this.value)">`
+              }
+            </td>
+            <td style="padding:8px;text-align:center;font-size:18px">${fyTL||'—'}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+}
+
+function setMonthlyVal(month, field, value) {
+  if (!_monthlyData[month]) _monthlyData[month] = {};
+  _monthlyData[month][field] = value;
+  // Re-render just the traffic light cell
+  const target = _targets.find(t => t.id === _monthlyTargetId);
+  if (target) renderMonthlyModal(target,
+    document.getElementById('target-emp').value,
+    parseInt(document.getElementById('target-year').value)
+  );
+}
+
+function setFyForecast(value) {
+  // Store in latest month
+  if (!_monthlyData[CUR_MONTH]) _monthlyData[CUR_MONTH] = {};
+  _monthlyData[CUR_MONTH].fyForecast = value;
+}
+
+async function saveMonthlyData() {
+  const empId  = document.getElementById('target-emp').value;
+  const year   = parseInt(document.getElementById('target-year').value);
+  const tId    = _monthlyTargetId;
+  const btn    = document.getElementById('btn-save-monthly');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  // Save each month individually
+  const saves = Object.entries(_monthlyData).map(async ([m, d]) => {
+    const docId = `${empId}_${year}_${m}`;
+    const snap  = await db.collection('actuals').doc(docId).get();
+    const base  = snap.exists ? snap.data() : { empId, year, month: parseInt(m) };
+
+    const actuals   = { ...(base.actuals   || {}), [tId]: { value: parseFloat(d.actual) || 0 } };
+    const plans     = { ...(base.plans     || {}), [tId]: { value: parseFloat(d.goal)   || 0 } };
+    const forecasts = { ...(base.forecasts || {}), [tId]: { fyForecast: parseFloat(d.fyForecast) || 0 } };
+    const tlOver    = { ...(base.trafficOverride || {}), [tId]: d.tl || '' };
+
+    return db.collection('actuals').doc(docId).set({
+      ...base, actuals, plans, forecasts,
+      trafficOverride: tlOver,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  });
+
+  await Promise.all(saves);
+  btn.textContent = '✓ Saved!'; btn.style.background = 'var(--green)'; btn.style.color = '#0a0c10';
+  setTimeout(() => {
+    btn.textContent = 'Save'; btn.style.background=''; btn.style.color=''; btn.disabled=false;
+    document.getElementById('modal-monthly').classList.remove('open');
+  }, 1500);
+}
+
 // ── Project KPI Modal ──
 function openKpiModal(targetId) {
   _editingKpiTargetId = targetId;
   const t = _targets.find(x=>x.id===targetId);
-  _tempKpis = t.kpis?.length ? JSON.parse(JSON.stringify(t.kpis)) : [blankKpi()];
-  document.getElementById('modal-kpis-title').textContent = `KPIs for: ${t.name||'Project'}`;
+  _tempKpis = t.kpis && t.kpis.length ? JSON.parse(JSON.stringify(t.kpis)) : [blankKpi()];
+  document.getElementById('modal-kpis-title').textContent = 'KPIs for: ' + (t.name||'Project');
   renderKpiRows();
   openModal('modal-kpis');
 }
-function blankKpi() { return {id:uid(),name:'',description:'',unit:'',weight:0}; }
-function renderKpiRows() {
-  const total=_tempKpis.reduce((s,k)=>s+(parseFloat(k.weight)||0),0);
-  const ok=Math.abs(total-100)<0.01;
-  document.getElementById('kpi-weight-status').className=`weight-status ${ok?'weight-ok':'weight-bad'}`;
-  document.getElementById('kpi-weight-status').innerHTML=`${ok?'✓':'⚠'} Total: <strong>${total}%</strong>${!ok?' — must equal 100%':''}`;
-  document.getElementById('btn-add-kpi').style.display=_tempKpis.length>=5?'none':'';
-  document.getElementById('btn-save-kpis').disabled=!ok||_tempKpis.some(k=>!k.name.trim());
-  document.getElementById('kpi-rows').innerHTML=_tempKpis.map((k,i)=>`
-    <div style="display:grid;grid-template-columns:1fr 1fr 80px 80px auto;gap:8px;align-items:end;padding:10px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
-      <div class="form-group"><label class="form-label">KPI ${i+1} Name</label><input value="${esc(k.name)}" placeholder="e.g. Conversion Rate" oninput="updateKpi('${k.id}','name',this.value)"></div>
-      <div class="form-group"><label class="form-label">Description</label><input value="${esc(k.description||'')}" placeholder="Optional" oninput="updateKpi('${k.id}','description',this.value)"></div>
-      <div class="form-group"><label class="form-label">Unit</label><input value="${esc(k.unit||'')}" placeholder="%, $, #" oninput="updateKpi('${k.id}','unit',this.value)"></div>
-      <div class="form-group"><label class="form-label">Weight %</label><input type="number" min="0" max="100" value="${k.weight}" oninput="updateKpi('${k.id}','weight',this.value)"></div>
-      <div style="padding-bottom:2px">${_tempKpis.length>1?`<button class="icon-btn" onclick="removeKpi('${k.id}')">🗑️</button>`:''}</div>
-    </div>`).join('');
+
+function blankKpi() { return {id:uid(), name:'', description:'', fyGoal:'', weight:0, direction:'gte'}; }
+
+// ── KEY FIX: never re-render DOM on text input — only update weight bar ──
+function syncKpisFromDOM() {
+  _tempKpis = _tempKpis.map(function(k) {
+    var nameEl  = document.getElementById('kn-'+k.id);
+    var descEl  = document.getElementById('kd-'+k.id);
+    var goalEl  = document.getElementById('kg-'+k.id);
+    var wEl     = document.getElementById('kw-'+k.id);
+    var dirEl   = document.getElementById('kdir-'+k.id);
+    return {
+      id:        k.id,
+      name:      nameEl  ? nameEl.value  : k.name,
+      description: descEl? descEl.value  : k.description,
+      fyGoal:    goalEl  ? goalEl.value  : k.fyGoal,
+      weight:    wEl     ? (parseFloat(wEl.value)||0) : k.weight,
+      direction: dirEl   ? dirEl.value   : k.direction,
+    };
+  });
 }
-function addKpiRow() { if(_tempKpis.length>=5)return; _tempKpis.push(blankKpi()); renderKpiRows(); }
-function removeKpi(id) { _tempKpis=_tempKpis.filter(k=>k.id!==id); renderKpiRows(); }
-function updateKpi(id,field,value) { _tempKpis=_tempKpis.map(k=>k.id===id?{...k,[field]:field==='weight'?(parseFloat(value)||0):value}:k); renderKpiRows(); }
-function distributeKpiWeights() { const w=Math.floor(100/_tempKpis.length),rem=100-w*_tempKpis.length; _tempKpis=_tempKpis.map((k,i)=>({...k,weight:i===0?w+rem:w})); renderKpiRows(); }
-function saveKpis() { _targets=_targets.map(t=>t.id===_editingKpiTargetId?{...t,kpis:_tempKpis}:t); closeModal('modal-kpis'); renderTargetsList(); }
+
+function updateKpiWeightBar() {
+  syncKpisFromDOM();
+  var total = _tempKpis.reduce(function(s,k){ return s+(k.weight||0); }, 0);
+  var ok = Math.abs(total-100) < 0.01;
+  var ws = document.getElementById('kpi-weight-status');
+  if (ws) {
+    ws.className = 'weight-status ' + (ok?'weight-ok':'weight-bad');
+    ws.innerHTML = (ok?'✓':'⚠') + ' Total: <strong>'+total+'%</strong>' + (!ok?' — must equal 100%':'');
+  }
+  var btn = document.getElementById('btn-save-kpis');
+  if (btn) btn.disabled = !ok || _tempKpis.some(function(k){ return !k.name.trim(); });
+}
+
+function renderKpiRows() {
+  // Only called on open, add, remove, distribute — NOT on text input
+  var total = _tempKpis.reduce(function(s,k){ return s+(parseFloat(k.weight)||0); },0);
+  var ok = Math.abs(total-100)<0.01;
+  var ws = document.getElementById('kpi-weight-status');
+  if (ws) { ws.className='weight-status '+(ok?'weight-ok':'weight-bad'); ws.innerHTML=(ok?'✓':'⚠')+' Total: <strong>'+total+'%</strong>'+(!ok?' — must equal 100%':''); }
+  var addBtn = document.getElementById('btn-add-kpi');
+  if (addBtn) addBtn.style.display = _tempKpis.length>=5?'none':'';
+  var saveBtn = document.getElementById('btn-save-kpis');
+  if (saveBtn) saveBtn.disabled = !ok || _tempKpis.some(function(k){ return !k.name.trim(); });
+
+  document.getElementById('kpi-rows').innerHTML = _tempKpis.map(function(k,i) {
+    return '<div style="display:grid;grid-template-columns:1fr 120px 130px 70px 90px auto;gap:8px;align-items:end;padding:12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);margin-bottom:8px">'
+      +'<div class="form-group"><label class="form-label">KPI '+(i+1)+' Name</label>'
+      +'<input id="kn-'+k.id+'" value="'+esc(k.name)+'" placeholder="e.g. Bookings $" oninput="updateKpiWeightBar()"></div>'
+      +'<div class="form-group"><label class="form-label">FY Goal</label>'
+      +'<input id="kg-'+k.id+'" value="'+esc(k.fyGoal||'')+'" placeholder="e.g. $5M"></div>'
+      +'<div class="form-group"><label class="form-label">Achievement</label>'
+      +'<select id="kdir-'+k.id+'" onchange="updateKpiWeightBar()" style="font-size:12px">'
+      +'<option value="gte" '+(( k.direction||'gte')==='gte'?'selected':'')+'>≥ Equal or greater</option>'
+      +'<option value="lte" '+(k.direction==='lte'?'selected':'')+'>≤ Equal or lower</option>'
+      +'<option value="yesno" '+(k.direction==='yesno'?'selected':'')+'>✓ Yes / No</option>'
+      +'</select></div>'
+      +'<div class="form-group"><label class="form-label">Weight %</label>'
+      +'<input id="kw-'+k.id+'" type="number" min="0" max="100" value="'+k.weight+'" oninput="updateKpiWeightBar()"></div>'
+      +'<div class="form-group"><label class="form-label">Description</label>'
+      +'<input id="kd-'+k.id+'" value="'+esc(k.description||'')+'" placeholder="Optional"></div>'
+      +(k.id && _tempKpis.length>1
+        ? '<div style="padding-bottom:2px"><button class="icon-btn" onclick="removeKpi(\'' + k.id + '\')">🗑️</button></div>'
+        : '<div></div>')
+      +'</div>';
+  }).join('');
+}
+
+function addKpiRow() {
+  if (_tempKpis.length>=5) return;
+  syncKpisFromDOM();
+  _tempKpis.push(blankKpi());
+  renderKpiRows();
+}
+
+function removeKpi(id) {
+  syncKpisFromDOM();
+  _tempKpis = _tempKpis.filter(function(k){ return k.id!==id; });
+  renderKpiRows();
+}
+
+function distributeKpiWeights() {
+  syncKpisFromDOM();
+  var w = Math.floor(100/_tempKpis.length);
+  var rem = 100 - w*_tempKpis.length;
+  _tempKpis = _tempKpis.map(function(k,i){ return Object.assign({},k,{weight: i===0?w+rem:w}); });
+  renderKpiRows();
+}
+
+function saveKpis() {
+  syncKpisFromDOM();
+  _targets = _targets.map(function(t){
+    return t.id===_editingKpiTargetId ? Object.assign({},t,{kpis:_tempKpis}) : t;
+  });
+  closeModal('modal-kpis');
+  renderTargetsList();
+}
 
 // ═══════════════════════════════════════════════════════
 // TRACKING PAGE

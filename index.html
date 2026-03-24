@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -424,6 +423,14 @@ nav{flex:1;padding:14px 8px 10px;display:flex;flex-direction:column;gap:2px;over
           <pre style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;color:var(--accent);overflow:auto;white-space:pre-wrap">rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Invites: public read so new users can activate accounts
+    match /invites/{inviteId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Everything else requires login
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
@@ -559,16 +566,33 @@ service cloud.firestore {
   </div>
 </div>
 
+
+<!-- Monthly Goals Modal -->
+<div class="modal-overlay" id="modal-monthly">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3 id="modal-monthly-title">Monthly Goals</h3>
+      <button class="modal-close" onclick="closeModal('modal-monthly')">×</button>
+    </div>
+    <div class="modal-body" id="modal-monthly-body" style="padding:16px 22px">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-monthly')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMonthlyData()" id="btn-save-monthly">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Project KPIs Modal -->
 <div class="modal-overlay" id="modal-kpis">
-  <div class="modal" style="max-width:700px">
+  <div class="modal" style="max-width:820px">
     <div class="modal-header">
       <h3 id="modal-kpis-title">KPIs for Project</h3>
       <button class="modal-close" onclick="closeModal('modal-kpis')">×</button>
     </div>
     <div class="modal-body">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <p style="color:var(--muted);font-size:13px">Define up to 5 KPIs. Weights must total 100%.</p>
+        <p style="color:var(--muted);font-size:13px">Define up to 5 KPIs. Weights must total 100%. Traffic light applies to the overall project score.</p>
         <div style="display:flex;gap:6px">
           <button class="btn btn-ghost btn-sm" onclick="distributeKpiWeights()">Auto-distribute</button>
           <button class="btn btn-secondary btn-sm" onclick="addKpiRow()" id="btn-add-kpi">+ Add KPI</button>
